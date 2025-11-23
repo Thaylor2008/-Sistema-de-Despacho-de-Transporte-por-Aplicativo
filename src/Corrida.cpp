@@ -20,30 +20,56 @@ Corrida::Corrida(int capacidadeMax){
 }
 
 void Corrida::adicionarDemanda(Demanda* d) {
+    if (qtdDemandas >= capacidade) {
+        // Proteção: não ultrapassar capacidade
+        return;
+    }
     demandas[qtdDemandas++] = d;
     d->setCorrida(this);
 }
 
 void Corrida::gerarParadas(){
+    // Antes de gerar novas paradas, liberar as antigas (se houver)
+    if (qtdParadas > 0) {
+        for (int i = 0; i < qtdParadas; i++) {
+            if (paradas[i] != nullptr) {
+                delete paradas[i];
+                paradas[i] = nullptr;
+            }
+        }
+    }
+
     qtdParadas = 0;
+    // criar embarques
     for(int i = 0; i < qtdDemandas; i++){
         paradas[qtdParadas++] = new Parada(demandas[i]->getOX(), demandas[i]->getOY(), EMBARQUE, demandas[i]);
-        
     }
-    for(int i= 0; i < qtdDemandas; i++){
-      paradas[qtdParadas++] = new Parada(demandas[i]->getDX(), demandas[i]->getDY(), DESEMBARQUE, demandas[i]);  
+    // criar desembarques
+    for(int i = 0; i < qtdDemandas; i++){
+        paradas[qtdParadas++] = new Parada(demandas[i]->getDX(), demandas[i]->getDY(), DESEMBARQUE, demandas[i]);
     }
 }
 
 void Corrida::gerarTrechos(double velocidade) {
+    // Antes de gerar novos trechos, liberar os antigos (se houver)
+    if (qtdTrechos > 0) {
+        for (int i = 0; i < qtdTrechos; i++) {
+            if (trechos[i] != nullptr) {
+                delete trechos[i];
+                trechos[i] = nullptr;
+            }
+        }
+    }
+
     qtdTrechos = 0;
 
     for (int i = 0; i < qtdParadas - 1 ; i++) {
         Parada* A = paradas[i];
         Parada* B = paradas[i+1];
-        
+
         double dist = distancia(A->getX(), A->getY(), B->getX(), B->getY());
-        double temp = dist / velocidade;
+        double temp = 0.0;
+        if (velocidade > 0.0) temp = dist / velocidade;
 
         TipoTrecho tipo;
 
@@ -59,10 +85,7 @@ void Corrida::gerarTrechos(double velocidade) {
 }
 
 bool Corrida::cheio(){ 
-    if(qtdDemandas < capacidade){
-       return false;
-    }
-     return true;
+    return qtdDemandas >= capacidade;
 }
 double Corrida::getDistanciaTotal(){ return distanciaTotal; }
 double Corrida::getTempoTotal(){ return tempoTotal; }
@@ -74,14 +97,14 @@ Parada* Corrida::getParada(int index) {
     if (index >= 0 && index < qtdParadas) {
         return paradas[index];
     }
-    return nullptr; // Ou tratamento de erro apropriado
+    return nullptr;
 }
 
 Trecho* Corrida::getTrecho(int index) {
     if (index >= 0 && index < qtdTrechos) {
         return trechos[index];
     }
-    return nullptr; // Ou tratamento de erro apropriado
+    return nullptr;
 }
 
 void Corrida::setTempoSolicitacao(double t) { 
@@ -99,7 +122,6 @@ double Corrida::getTempoConclusao() {
 }
 
 void Corrida::imprimirSaidaFinal() {
-    // Formato exigido: tempoFinal distanciaTotal nParadas x1 y1 x2 y2 ...
     std::cout << std::fixed << std::setprecision(2);
     std::cout << tempoConclusao << " " << distanciaTotal << " " << qtdParadas;
     if (qtdParadas > 0) std::cout << " ";
@@ -111,14 +133,10 @@ void Corrida::imprimirSaidaFinal() {
     std::cout << "\n";
 }
 
-
 double Corrida::distancia(double x1, double y1, double x2, double y2){
-    double distancia = 0;
     double dx = x2 - x1;
     double dy = y2 - y1;
-    distancia = sqrt(dx*dx + dy*dy);
-    
-    return distancia;
+    return std::sqrt(dx*dx + dy*dy);
 }
 
 bool Corrida::distancia_de_origens(Demanda* d, double alfa){
@@ -141,7 +159,6 @@ bool Corrida::distancia_de_destinos(Demanda* d, double beta){
     }
     return false;
 }
-
 
 void Corrida::calcularDistanciaTotal() {
     distanciaTotal = 0;
@@ -186,29 +203,51 @@ void Corrida::removedemanda() {
     // atualizar contador
     qtdDemandas--;
 
-    // resetar paradas/trechos e reconstruir tudo
+    // Ao remover uma demanda precisamos reconstruir paradas e trechos:
+    // antes, liberar paradas e trechos atuais para evitar vazamento
+    if (qtdParadas > 0) {
+        for (int i = 0; i < qtdParadas; i++) {
+            if (paradas[i] != nullptr) {
+                delete paradas[i];
+                paradas[i] = nullptr;
+            }
+        }
+    }
+    if (qtdTrechos > 0) {
+        for (int i = 0; i < qtdTrechos; i++) {
+            if (trechos[i] != nullptr) {
+                delete trechos[i];
+                trechos[i] = nullptr;
+            }
+        }
+    }
+
+    // reconstruir
     qtdParadas = 0;
     qtdTrechos = 0;
-
     gerarParadas();
+    // gerarTrechos NÃO pode ser chamado antes de gerarParadas()
+    // gerarTrechos dependerá de passar a velocidade apropriada onde for chamado
 }
 
 Corrida::~Corrida() {
-    // 1. Liberar objetos Parada e Trecho criados dentro de gerarParadas e gerarTrechos.
-    
     // Deletar todos os objetos Parada
-    for (int i = 0; i < qtdParadas; i++) {
-        if (paradas[i] != nullptr) {
-            delete paradas[i];
-            paradas[i] = nullptr;
+    if (paradas != nullptr) {
+        for (int i = 0; i < qtdParadas; i++) {
+            if (paradas[i] != nullptr) {
+                delete paradas[i];
+                paradas[i] = nullptr;
+            }
         }
     }
-    
+
     // Deletar todos os objetos Trecho
-    for (int i = 0; i < qtdTrechos; i++) {
-        if (trechos[i] != nullptr) {
-            delete trechos[i];
-            trechos[i] = nullptr;
+    if (trechos != nullptr) {
+        for (int i = 0; i < qtdTrechos; i++) {
+            if (trechos[i] != nullptr) {
+                delete trechos[i];
+                trechos[i] = nullptr;
+            }
         }
     }
 
@@ -227,8 +266,6 @@ Corrida::~Corrida() {
         trechos = nullptr;
     }
 }
-
-
 
 // sobrecarga de operador <<
 ostream& operator<<(ostream& os, const Corrida& c) {
@@ -259,5 +296,3 @@ ostream& operator<<(ostream& os, const Corrida& c) {
 
     return os;
 }
-
-
